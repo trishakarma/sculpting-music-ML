@@ -9,10 +9,12 @@ def is_finger_up(landmarks, tip, pip):
     return (landmarks[tip].y < landmarks[pip].y)
 
 def is_thumb_up(landmarks, hand_label):
-    if hand_label == "right":
-        return (landmarks[4].x > landmarks[3].x)
+    tip = landmarks[4]
+    joint = landmarks[3]
+    if hand_label == "Left":
+        return tip.x > joint.x
     else:
-        return (landmarks[4].x < landmarks[3].x)
+        return tip.x < joint.x  
 
 def classify_hand_gesture(landmarks, hand_label):
     index_up = is_finger_up(landmarks, 8, 6) # index
@@ -54,10 +56,17 @@ with mp_hands.Hands(
                         mp_drawing_styles.get_default_hand_landmarks_style(),
                         mp_drawing_styles.get_default_hand_connections_style())
                     
+                    h, w, _ = image.shape
+                    x_coords = [lm.x * w for lm in hand_landmarks.landmark]
+                    y_coords = [lm.y * h for lm in hand_landmarks.landmark]
+                    x_min, x_max = int(min(x_coords)), int(max(x_coords))
+                    y_min, y_max = int(min(y_coords)), int(max(y_coords))
+
                     gesture = classify_hand_gesture(hand_landmarks.landmark, hand_label)
                     
-                    cv2.putText(image, f"{hand_label} - {gesture}", (10, 50), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                    cv2.rectangle(image, (x_min - 10, y_min - 10), (x_max + 10, y_max + 10), (102, 0, 51), 2)
+                    cv2.putText(image, f"{hand_label} - {gesture}", (x_min, y_min - 20), 
+                           cv2.FONT_HERSHEY_DUPLEX, 1, (102, 0, 51), 2)
             
         cv2.imshow('Hand Gesture Detection', image)
         
