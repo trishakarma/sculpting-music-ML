@@ -11,8 +11,21 @@ class AudioEffects:
         self.chunk_size = chunk_size
         self.format = format
         self.channels = 1
+
+        #pyaudio initializations
         self.p = pyaudio.PyAudio()
         self.stream = None
+
+        self.frame_length = 2048
+        self.hop_length = self.frame_length // 4
+        self.fmin = librosa.note_to_hz('C2')
+        self.fmax = librosa.note_to_hz('C7')
+
+
+    def closest_pitch(self, f0):
+        midi_note = np.around(librosa.hz_to_midi(f0))
+        midi_note[np.isnan(f0)] = np.nan
+        return librosa.midi_to_hz(midi_note)
         
 
       
