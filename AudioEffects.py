@@ -26,6 +26,6 @@ class AudioEffects:
         midi_note = np.around(librosa.hz_to_midi(f0))
         midi_note[np.isnan(f0)] = np.nan
         return librosa.midi_to_hz(midi_note)
+    
+    def apply_autotune(self, audio):
         
-
-      
