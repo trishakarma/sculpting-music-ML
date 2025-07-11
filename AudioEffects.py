@@ -3,6 +3,7 @@
 import pyaudio
 import numpy as np 
 import librosa
+import psola
 
 class AudioEffects:
 
@@ -28,4 +29,20 @@ class AudioEffects:
         return librosa.midi_to_hz(midi_note)
     
     def apply_autotune(self, audio):
-        
+        f0, voiced_flag, voiced_probabilities = librosa.pyin(
+                audio,
+                frame_length=self.frame_length,
+                hop_length=self.hop_length,
+                sr=self.sample_rate,
+                fmin=self.fmin,
+                fmax=self.fmax
+            )
+        corrected_f0 = self.closest_pitch(f0)
+
+        corrected_audio = psola.vocode(
+                audio, 
+                sample_rate=int(self.sample_rate), 
+                target_pitch=corrected_f0, 
+                fmin=self.fmin, 
+                fmax=self.fmax
+            )
