@@ -46,3 +46,30 @@ class AudioEffects:
                 fmin=self.fmin, 
                 fmax=self.fmax
             )
+        
+    def audio_callback(self, in_data, frame_count, time_info, status):
+        if status:
+            print(f"Audio status: {status}")
+        audio_input = np.frombuffer(in_data, dtype=np.float32)
+        self.input_buffer.extend(audio_input)
+        output_data = np.zeros(frame_count, dtype=np.float32)
+        
+        if len(self.output_buffer) >= frame_count:
+            for i in range(frame_count):
+                if self.output_buffer:
+                    output_data[i] = self.output_buffer.popleft()
+        else:
+            output_data = audio_input
+        
+        return (output_data.tobytes(), pyaudio.paContinue)
+    
+    def processing_worker(self):
+        while self.is_processing:
+                if len(self.input_buffer) >= self.chunk_size:
+                    chunk = np.array([self.input_buffer.popleft() for _ in range(min(self.chunk_size, len(self.input_buffer)))])
+                    processed_chunk = self.apply_autotune(chunk)
+                    self.output_buffer.extend(processed_chunk)
+                    while len(self.output_buffer) > self.sample_rate:  
+                        self.output_buffer.popleft()
+
+
