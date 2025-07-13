@@ -54,6 +54,7 @@ class AudioEffects:
                 fmin=self.fmin, 
                 fmax=self.fmax
             )
+        return corrected_audio
         
     def audio_callback(self, in_data, frame_count, time_info, status):
         if status:
@@ -142,7 +143,7 @@ class HandGestureAudioController:
     def __init__(self):
         self.autotune_processor = AudioEffects(
             sample_rate=44100,
-            chunk_size=4096  # Larger chunk for better quality processing
+            chunk_size=4096  # Larger chunk for better processing
         )
         
     def start(self):
