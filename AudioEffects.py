@@ -11,7 +11,7 @@ class AudioEffects:
     def __init__(self, sample_rate = 44100, chunk_size = 4096, format=pyaudio.paFloat32):
         self.sample_rate = sample_rate
         self.chunk_size = chunk_size
-        self.format = format
+        self.format = formata
         self.channels = 1
 
         #pyaudio initializations
