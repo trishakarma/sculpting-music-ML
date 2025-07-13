@@ -18,6 +18,7 @@ class AudioEffects:
         self.p = pyaudio.PyAudio()
         self.stream = None
 
+        # librosa param
         self.frame_length = 2048
         self.hop_length = self.frame_length // 4
         self.fmin = librosa.note_to_hz('C2')
@@ -37,24 +38,32 @@ class AudioEffects:
         return librosa.midi_to_hz(midi_note)
     
     def apply_autotune(self, audio):
-        f0, voiced_flag, voiced_probabilities = librosa.pyin(
-                audio,
-                frame_length=self.frame_length,
-                hop_length=self.hop_length,
-                sr=self.sample_rate,
-                fmin=self.fmin,
-                fmax=self.fmax
-            )
-        corrected_f0 = self.closest_pitch(f0)
+        if not self.autotune_enabled:
+            return audio
+        try:
+            f0, voiced_flag, voiced_probabilities = librosa.pyin(
+                    audio,
+                    frame_length=self.frame_length,
+                    hop_length=self.hop_length,
+                    sr=self.sample_rate,
+                    fmin=self.fmin,
+                    fmax=self.fmax
+                )
+            corrected_f0 = self.closest_pitch(f0)
 
-        corrected_audio = psola.vocode(
-                audio, 
-                sample_rate=int(self.sample_rate), 
-                target_pitch=corrected_f0, 
-                fmin=self.fmin, 
-                fmax=self.fmax
-            )
-        return corrected_audio
+            corrected_audio = psola.vocode(
+                    audio, 
+                    sample_rate=int(self.sample_rate), 
+                    target_pitch=corrected_f0, 
+                    fmin=self.fmin, 
+                    fmax=self.fmax
+                )
+            return (self.correction_strength * corrected_audio + 
+                        (1 - self.correction_strength) * audio)
+                    
+        except Exception as e:
+                    print(f"Exception: {e}")
+                    return audio
         
     def audio_callback(self, in_data, frame_count, time_info, status):
         if status:
