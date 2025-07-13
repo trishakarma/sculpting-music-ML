@@ -68,6 +68,7 @@ class AudioEffects:
     def audio_callback(self, in_data, frame_count, time_info, status):
         if status:
             print(f"Audio status: {status}")
+
         audio_input = np.frombuffer(in_data, dtype=np.float32)
         self.input_buffer.extend(audio_input)
         output_data = np.zeros(frame_count, dtype=np.float32)
