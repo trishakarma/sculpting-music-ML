@@ -12,7 +12,7 @@ def main():
     controller.start()
 
     cap = cv2.VideoCapture(0)
-
+    
     with mp_hands.Hands(
     model_complexity=0,
     min_detection_confidence=0.5,
@@ -46,6 +46,7 @@ def main():
                         y_min, y_max = int(min(y_coords)), int(max(y_coords))
 
                         gesture = classify_hand_gesture(hand_landmarks.landmark, hand_label)
+                        controller.on_gesture_detected(gesture)
                         
                         cv2.rectangle(image, (x_min - 10, y_min - 10), (x_max + 10, y_max + 10), (102, 0, 51), 2)
                         cv2.putText(image, f"{hand_label} - {gesture}", (x_min, y_min - 20), 
