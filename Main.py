@@ -12,6 +12,9 @@ def main():
     controller.start()
 
     cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        print("Error: Cannot open webcam.")
+        return
     
     with mp_hands.Hands(
     model_complexity=0,
@@ -51,7 +54,7 @@ def main():
                         cv2.rectangle(image, (x_min - 10, y_min - 10), (x_max + 10, y_max + 10), (102, 0, 51), 2)
                         cv2.putText(image, f"{hand_label} - {gesture}", (x_min, y_min - 20), 
                             cv2.FONT_HERSHEY_DUPLEX, 1, (102, 0, 51), 2)
-                
+
             cv2.imshow('Hand Gesture Detection', image)
             
             if cv2.waitKey(5) & 0xFF == 27:
@@ -59,3 +62,6 @@ def main():
 
     cap.release()
     cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()
