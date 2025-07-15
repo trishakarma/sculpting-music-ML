@@ -165,7 +165,7 @@ class HandGestureAudioController:
     def __init__(self):
         self.autotune_processor = AudioEffects(
             sample_rate=44100,
-            chunk_size=4096  
+            chunk_size=4096  # Larger chunk for better processing
         )
         
     def start(self):
