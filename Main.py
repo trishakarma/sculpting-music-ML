@@ -62,7 +62,7 @@ def main():
                 break
             elif key == ord('s'):  # 's' key to save audio
                 controller.save_audio()
-                print("Audio saved! Press 's' again to save another file.")
+                print("Press 's' again to save another file.")
 
     cap.release()
     cv2.destroyAllWindows()
