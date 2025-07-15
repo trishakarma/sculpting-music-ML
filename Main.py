@@ -12,9 +12,6 @@ def main():
     controller.start()
 
     cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("Error: Cannot open webcam.")
-        return
     
     with mp_hands.Hands(
     model_complexity=0,

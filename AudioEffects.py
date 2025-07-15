@@ -11,7 +11,7 @@ class AudioEffects:
 
     def __init__(self, sample_rate = 44100, chunk_size = 4096, format=pyaudio.paFloat32):
         self.sample_rate = sample_rate
-        self.chunk_size = chunk_size
+        self.chunk_size =  max(chunk_size, 8192)
         self.format = format
         self.channels = 1
 
@@ -20,7 +20,7 @@ class AudioEffects:
         self.stream = None
 
         # librosa param
-        self.frame_length = 2048
+        self.frame_length = 4096
         self.hop_length = self.frame_length // 4
         self.fmin = librosa.note_to_hz('C2')
         self.fmax = librosa.note_to_hz('C7')
@@ -31,7 +31,7 @@ class AudioEffects:
         self.autotune_enabled = False
         self.is_processing = False
         self.processing_thread = None
-        self.correction_strength = 0.8
+        self.correction_strength = 0.9
 
         self.voice_layering_enabled = False
         self.processed_audio = []
@@ -45,6 +45,9 @@ class AudioEffects:
         if not self.autotune_enabled:
             return audio
         try:
+            if len(audio) < self.frame_length:
+                return audio
+            audio = audio / np.max(np.abs(audio)) if np.max(np.abs(audio)) > 0 else audio
             f0, _, _ = librosa.pyin(
                     audio,
                     frame_length=self.frame_length,
@@ -54,6 +57,9 @@ class AudioEffects:
                     fmax=self.fmax
                 )
             corrected_f0 = self.closest_pitch(f0)
+            
+            if np.all(np.isnan(corrected_f0)):
+                return audio
 
             corrected_audio = psola.vocode(
                     audio, 
@@ -73,11 +79,11 @@ class AudioEffects:
             return audio
         layered = audio.copy()
         for i in range(1, num_layers + 1):
-            pitch_shift = 1.0 + (i * 0.02)
+            pitch_shift = i * 0.5 
             shifted = librosa.effects.pitch_shift(audio, sr=self.sample_rate, n_steps=pitch_shift)
-            delay_samples = i * 500
+            delay_samples = i * 200
             delayed = np.pad(shifted, (delay_samples, 0), mode='constant')[:len(audio)]
-            layered += 0.3 * delayed / (i + 1)
+            layered += 0.2 * delayed / (i + 1)
         return layered
     
     def processing_worker(self):
@@ -138,12 +144,13 @@ class AudioEffects:
         filepath = os.path.join("output", filename)
             
         audio_array = np.array(self.processed_audio)
-        audio_array = audio_array / np.max(np.abs(audio_array)) * 0.9 if np.max(np.abs(audio_array)) > 0 else audio_array
+        if np.max(np.abs(audio_array)) > 0:
+            audio_array = audio_array / np.max(np.abs(audio_array)) * 0.8
         audio_int16 = (audio_array * 32767).astype(np.int16)
             
         with wave.open(filepath, 'w') as wav_file:
             wav_file.setnchannels(self.channels)
-            wav_file.setsampwidth(2)  # 16-bit
+            wav_file.setsampwidth(2)  
             wav_file.setframerate(self.sample_rate)
             wav_file.writeframes(audio_int16.tobytes())
             
@@ -158,7 +165,7 @@ class HandGestureAudioController:
     def __init__(self):
         self.autotune_processor = AudioEffects(
             sample_rate=44100,
-            chunk_size=4096  # Larger chunk for better processing
+            chunk_size=4096  
         )
         
     def start(self):
