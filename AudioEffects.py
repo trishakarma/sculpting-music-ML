@@ -32,11 +32,10 @@ class AudioEffects:
         self.autotune_enabled = False
         self.is_processing = False
         self.processing_thread = None
-        self.correction_strength = 0.6
+        self.correction_strength = 0.3
 
         self.voice_layering_enabled = False
         self.processed_audio = []
-        self.fade_len = 512
         
     def closest_pitch(self, f0):
         midi_note = np.around(librosa.hz_to_midi(f0))
@@ -154,9 +153,11 @@ class AudioEffects:
         filepath = os.path.join("output", filename)
             
         audio_array = np.array(self.processed_audio)
+
         max_amp = np.max(np.abs(audio_array))
         if max_amp > 0:
             audio_array = audio_array / max_amp * 0.7
+            
         audio_array = audio_array / np.max(np.abs(audio_array)) * 0.9 if np.max(np.abs(audio_array)) > 0 else audio_array
         audio_int16 = (audio_array * 32767).astype(np.int16)
             
@@ -177,7 +178,7 @@ class HandGestureAudioController:
     def __init__(self):
         self.autotune_processor = AudioEffects(
             sample_rate=44100,
-            chunk_size=4096  # Larger chunk for better processing
+            chunk_size=4096  
         )
         
     def start(self):
