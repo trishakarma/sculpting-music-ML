@@ -4,7 +4,8 @@ import librosa
 import psola
 from collections import deque
 import threading
-import time
+import os
+import wave
 
 class AudioEffects:
 
@@ -24,14 +25,17 @@ class AudioEffects:
         self.fmin = librosa.note_to_hz('C2')
         self.fmax = librosa.note_to_hz('C7')
 
-        self.input_buffer = deque(maxlen=sample_rate * 2)  
-        self.output_buffer = deque(maxlen=sample_rate * 2)
+        self.input_buffer = deque()
+        self.output_buffer = deque()
 
-        self.is_processing = False
         self.autotune_enabled = False
+        self.is_processing = False
         self.processing_thread = None
-        self.correction_strength = 1.0
+        self.correction_strength = 0.8
 
+        self.voice_layering_enabled = False
+        self.processed_audio = []
+        
     def closest_pitch(self, f0):
         midi_note = np.around(librosa.hz_to_midi(f0))
         midi_note[np.isnan(f0)] = np.nan
@@ -41,10 +45,10 @@ class AudioEffects:
         if not self.autotune_enabled:
             return audio
         try:
-            f0, voiced_flag, voiced_probabilities = librosa.pyin(
+            f0, _, _ = librosa.pyin(
                     audio,
                     frame_length=self.frame_length,
-                    hop_length=self.hop_length,
+                    hop_length=int(self.hop_length // 1.5),
                     sr=self.sample_rate,
                     fmin=self.fmin,
                     fmax=self.fmax
@@ -55,8 +59,7 @@ class AudioEffects:
                     audio, 
                     sample_rate=int(self.sample_rate), 
                     target_pitch=corrected_f0, 
-                    fmin=self.fmin, 
-                    fmax=self.fmax
+                    fmin=self.fmin, fmax=self.fmax
                 )
             return (self.correction_strength * corrected_audio + 
                         (1 - self.correction_strength) * audio)
@@ -64,87 +67,89 @@ class AudioEffects:
         except Exception as e:
                     print(f"Exception: {e}")
                     return audio
-        
-    def audio_callback(self, in_data, frame_count, time_info, status):
-        if status:
-            print(f"Audio status: {status}")
 
-        audio_input = np.frombuffer(in_data, dtype=np.float32)
-        self.input_buffer.extend(audio_input)
-        output_data = np.zeros(frame_count, dtype=np.float32)
-        
-        if len(self.output_buffer) >= frame_count:
-            for i in range(frame_count):
-                if self.output_buffer:
-                    output_data[i] = self.output_buffer.popleft()
-        else:
-            output_data = audio_input
-        
-        return (output_data.tobytes(), pyaudio.paContinue)
+    def apply_voice_layering(self, audio, num_layers = 3):
+        if not self.voice_layering_enabled:
+            return audio
+        layered = audio.copy()
+        for i in range(1, num_layers + 1):
+            pitch_shift = 1.0 + (i * 0.02)
+            shifted = librosa.effects.pitch_shift(audio, sr=self.sample_rate, n_steps=pitch_shift)
+            delay_samples = i * 500
+            delayed = np.pad(shifted, (delay_samples, 0), mode='constant')[:len(audio)]
+            layered += 0.3 * delayed / (i + 1)
+        return layered
     
     def processing_worker(self):
         while self.is_processing:
-                if len(self.input_buffer) >= self.chunk_size:
-                    chunk = np.array([self.input_buffer.popleft() for _ in range(min(self.chunk_size, len(self.input_buffer)))])
-                    processed_chunk = self.apply_autotune(chunk)
-                    self.output_buffer.extend(processed_chunk)
-                    while len(self.output_buffer) > self.sample_rate:  
-                        self.output_buffer.popleft()
-    
+                data = self.stream.read(self.chunk_size, exception_on_overflow=False)
+                audio = np.frombuffer(data, dtype=np.float32)
+                processed = self.apply_autotune(audio)
+                processed = self.apply_voice_layering(processed) 
+                self.processed_audio.extend(processed)
+
     def start_processing(self):
         if self.is_processing:
-            print("Already processing audio")
             return
-        
-        try:
-            self.is_processing = True
-            self.processing_thread = threading.Thread(target=self.processing_worker)
-            self.processing_thread.daemon = True
-            self.processing_thread.start()
+        self.is_processing = True
+        self.processed_audio = []
+        self.stream = self.p.open(
+            format=self.format,
+            channels=self.channels,
+            rate=self.sample_rate,
+            input=True,
+            frames_per_buffer=self.chunk_size,
+            start=True
+        )
+
+        self.processing_thread = threading.Thread(target=self.processing_worker, daemon=True)
+        self.processing_thread.start()
+        print("Processing started")
             
-            self.stream = self.p.open(
-                format=self.format,
-                channels=self.channels,
-                rate=self.sample_rate,
-                input=True,
-                output=True,
-                frames_per_buffer=self.chunk_size // 4,  # Smaller buffer for lower latency
-                stream_callback=self.audio_callback,
-                start=False
-            )
-            
-            self.stream.start_stream()
-            print("Audio processing started")
-            
-        except Exception as e:
-            print(f"Error starting audio processing: {e}")
-            self.is_processing = False
-    
     def stop_processing(self):
         if not self.is_processing:
             return
         
         self.is_processing = False
-        
-        if self.stream:
-            self.stream.stop_stream()
-            self.stream.close()
-            self.stream = None
-        
-        if self.processing_thread:
-            self.processing_thread.join(timeout=1.0)
-            
-        print("Audio processing stopped")
+        self.processing_thread.join()
+        self.stream.stop_stream()
+        self.stream.close()
+        self.stream = None
+        print("Recording stopped.")
     
     def set_autotune_enabled(self, enabled):
         self.autotune_enabled = enabled
         status = "enabled" if enabled else "disabled"
         print(f"Autotune {status}")
     
-    def set_correction_strength(self, strength):
-        self.correction_strength = max(0, min(1, strength))
-        print(f"Correction strength set to {self.correction_strength}")
-    
+    def set_voice_layering_enabled(self, enabled):
+        self.voice_layering_enabled = enabled
+        print(f"Layering {'ON' if enabled else 'OFF'}")
+
+    def save_audio(self, filename=None):
+        if not self.processed_audio:
+            print("No audio to save")
+            return None
+                
+        if filename is None:
+            filename = f"processed_audio.wav"
+            
+        os.makedirs("output", exist_ok=True)
+        filepath = os.path.join("output", filename)
+            
+        audio_array = np.array(self.processed_audio)
+        audio_array = audio_array / np.max(np.abs(audio_array)) * 0.9 if np.max(np.abs(audio_array)) > 0 else audio_array
+        audio_int16 = (audio_array * 32767).astype(np.int16)
+            
+        with wave.open(filepath, 'w') as wav_file:
+            wav_file.setnchannels(self.channels)
+            wav_file.setsampwidth(2)  # 16-bit
+            wav_file.setframerate(self.sample_rate)
+            wav_file.writeframes(audio_int16.tobytes())
+            
+        print(f"Audio saved to: {filepath}")
+        return filepath
+        
     def __del__(self):
         if hasattr(self, 'p'):
             self.p.terminate()
@@ -161,9 +166,13 @@ class HandGestureAudioController:
         
     def stop(self):
         self.autotune_processor.stop_processing()
+
+    def save_audio(self, filename=None):
+        return self.autotune_processor.save_audio(filename)
         
     def on_gesture_detected(self, gesture):
         if gesture == 'fist':
             self.autotune_processor.set_autotune_enabled(True)
         elif gesture == 'open palm':
             self.autotune_processor.set_autotune_enabled(False)
+
