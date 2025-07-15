@@ -6,6 +6,7 @@ from collections import deque
 import threading
 import os
 import wave
+from scipy.signal import get_window
 
 class AudioEffects:
 
@@ -20,8 +21,8 @@ class AudioEffects:
         self.stream = None
 
         # librosa param
-        self.frame_length = 4096
-        self.hop_length = self.frame_length // 4
+        self.frame_length = 2048
+        self.hop_length = self.frame_length // 2
         self.fmin = librosa.note_to_hz('C2')
         self.fmax = librosa.note_to_hz('C7')
 
@@ -74,12 +75,9 @@ class AudioEffects:
                 )
             output = (self.correction_strength * corrected_audio + 
                       (1 - self.correction_strength) * audio)
-
-            fade_in = np.linspace(0.0, 1.0, self.fade_len)
-            fade_out = np.linspace(1.0, 0.0, self.fade_len)
-            output[:self.fade_len] *= fade_in
-            output[-self.fade_len:] *= fade_out
-
+            
+            window = get_window('hann', len(audio))
+            audio *= window
             return output
                     
         except Exception as e:
