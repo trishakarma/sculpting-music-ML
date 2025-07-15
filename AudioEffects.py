@@ -31,10 +31,11 @@ class AudioEffects:
         self.autotune_enabled = False
         self.is_processing = False
         self.processing_thread = None
-        self.correction_strength = 0.9
+        self.correction_strength = 0.6
 
         self.voice_layering_enabled = False
         self.processed_audio = []
+        self.fade_len = 512
         
     def closest_pitch(self, f0):
         midi_note = np.around(librosa.hz_to_midi(f0))
@@ -47,6 +48,8 @@ class AudioEffects:
         try:
             if len(audio) < self.frame_length:
                 return audio
+            window = np.hanning(len(audio))
+            audio = audio * window
             audio = audio / np.max(np.abs(audio)) if np.max(np.abs(audio)) > 0 else audio
             f0, _, _ = librosa.pyin(
                     audio,
@@ -56,7 +59,9 @@ class AudioEffects:
                     fmin=self.fmin,
                     fmax=self.fmax
                 )
-            corrected_f0 = self.closest_pitch(f0)
+            f0 = np.nan_to_num(f0, nan=0.0)
+            smoothed_f0 = np.convolve(f0, np.ones(5) / 5, mode='same')
+            corrected_f0 = self.closest_pitch(smoothed_f0)
             
             if np.all(np.isnan(corrected_f0)):
                 return audio
@@ -67,8 +72,15 @@ class AudioEffects:
                     target_pitch=corrected_f0, 
                     fmin=self.fmin, fmax=self.fmax
                 )
-            return (self.correction_strength * corrected_audio + 
-                        (1 - self.correction_strength) * audio)
+            output = (self.correction_strength * corrected_audio + 
+                      (1 - self.correction_strength) * audio)
+
+            fade_in = np.linspace(0.0, 1.0, self.fade_len)
+            fade_out = np.linspace(1.0, 0.0, self.fade_len)
+            output[:self.fade_len] *= fade_in
+            output[-self.fade_len:] *= fade_out
+
+            return output
                     
         except Exception as e:
                     print(f"Exception: {e}")
@@ -144,13 +156,15 @@ class AudioEffects:
         filepath = os.path.join("output", filename)
             
         audio_array = np.array(self.processed_audio)
-        if np.max(np.abs(audio_array)) > 0:
-            audio_array = audio_array / np.max(np.abs(audio_array)) * 0.8
+        max_amp = np.max(np.abs(audio_array))
+        if max_amp > 0:
+            audio_array = audio_array / max_amp * 0.7
+        audio_array = audio_array / np.max(np.abs(audio_array)) * 0.9 if np.max(np.abs(audio_array)) > 0 else audio_array
         audio_int16 = (audio_array * 32767).astype(np.int16)
             
         with wave.open(filepath, 'w') as wav_file:
             wav_file.setnchannels(self.channels)
-            wav_file.setsampwidth(2)  
+            wav_file.setsampwidth(2)  # 16-bit
             wav_file.setframerate(self.sample_rate)
             wav_file.writeframes(audio_int16.tobytes())
             
