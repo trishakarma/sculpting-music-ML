@@ -57,11 +57,16 @@ def main():
 
             cv2.imshow('Hand Gesture Detection', image)
             
-            if cv2.waitKey(5) & 0xFF == 27:
+            key = cv2.waitKey(5) & 0xFF
+            if key == 27:  # ESC key
                 break
+            elif key == ord('s'):  # 's' key to save audio
+                controller.save_audio()
+                print("Audio saved! Press 's' again to save another file.")
 
     cap.release()
     cv2.destroyAllWindows()
+    controller.stop()
 
 if __name__ == "__main__":
     main()
